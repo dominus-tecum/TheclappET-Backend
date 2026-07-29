@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # CORS - ADD YOUR RENDER URL HERE
     CORS_ORIGINS: List[str] = [
-        "https://theclapp-backend.onrender.com",  # ← YOUR RENDER BACKEND
+        "https://theclappet-backend.onrender.com",  # ← YOUR RENDER BACKEND
         "http://localhost:8081",
         "exp://localhost:8081", 
         "https://*.ngrok.io",

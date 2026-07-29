@@ -5,7 +5,7 @@ Simple Admin Creation Script - No Database Required
 
 import requests
 
-RENDER_APP_URL = "https://theclapp-backend.onrender.com"
+RENDER_APP_URL = "https://theclappet-backend.onrender.com"
 
 def create_admin():
     print("\n" + "="*50)
