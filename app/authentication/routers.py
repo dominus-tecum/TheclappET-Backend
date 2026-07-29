@@ -7,11 +7,12 @@ from .schemas import UserRegister, UserLogin, UserRead
 from .service import create_user 
 from .auth import create_access_token, get_current_user, authenticate_user
 from jose import jwt
-from app.core.config import settings  # ✅ IMPORT SETTINGS
+from app.core.config import settings
 from app.utils.audit import log_audit
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.utils.encryption import encrypt_value, hash_value
+import bcrypt
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -19,6 +20,13 @@ router = APIRouter(tags=["Authentication"])
 
 # In-memory storage for refresh tokens
 REFRESH_TOKENS = {}
+
+# Direct bcrypt functions
+def get_password_hash(password: str) -> str:
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 # Helper function to create refresh tokens
 def create_refresh_token(username: str, user_id: int):
@@ -31,11 +39,10 @@ def create_refresh_token(username: str, user_id: int):
             "type": "refresh",
             "exp": expire
         },
-        settings.JWT_SECRET_KEY,  # ✅ USE SAME SECRET KEY
-        algorithm=settings.ALGORITHM  # ✅ USE SAME ALGORITHM
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.ALGORITHM
     )
     
-    # Store it in memory
     REFRESH_TOKENS[refresh_token] = {
         "user_id": user_id,
         "username": username,
@@ -132,9 +139,8 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
     if not org:
         raise HTTPException(status_code=400, detail="Invalid organization")
 
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    hashed_password = pwd_context.hash(user.password)
+    # Direct bcrypt - NO passlib
+    hashed_password = get_password_hash(user.password)
 
     created_user = User(
         username=user.username,
@@ -162,9 +168,9 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
     )
 
     
-    db.add(created_user)  # ← ADD THIS LINE
+    db.add(created_user)
     db.commit()
-    db.refresh(created_user)  # ← ADD THIS LINE (to get the ID)
+    db.refresh(created_user)
 
         # ========== LINK PENDING CONSENTS TO NEW USER ==========
     # After user is created, link any pending consents from the last hour
@@ -554,14 +560,14 @@ async def save_consent(
                 created_at=datetime.now()
             )
             db.add(consent)
-            db.flush()  # ← ADD THIS - assigns ID to consent
-            consent_ids.append(consent.id)  # ← ADD THIS - collect the ID
+            db.flush()
+            consent_ids.append(consent.id)
     
     db.commit()
     
     # Store consent IDs in session
     request.session['pending_consent_ids'] = consent_ids
-    print(f"✅ Stored consent_ids in session: {consent_ids}")  # ← ADD THIS
+    print(f"✅ Stored consent_ids in session: {consent_ids}")
     
     # Log audit
     audit = AuditLog(
@@ -586,8 +592,6 @@ def update_super_admin(
     db: Session = Depends(get_db)
 ):
     """Update super admin account - Only existing super admin can use this"""
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
     # SECURITY: Only existing super admin can access
     if not current_user.is_super_admin:
@@ -605,7 +609,7 @@ def update_super_admin(
     if username:
         admin_user.username = username
     if password:
-        admin_user.password_hash = pwd_context.hash(password)
+        admin_user.password_hash = get_password_hash(password)
     
     # Ensure super admin flag stays true
     admin_user.is_super_admin = True
@@ -634,30 +638,28 @@ def create_super_admin_temp(
     db: Session = Depends(get_db)
 ):
     """TEMPORARY - Create super admin"""
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
     existing = db.query(User).filter(User.email == email).first()
     if existing:
         existing.is_super_admin = True
         existing.role = UserRole.ADMIN
         existing.status = 'approved'
-        existing.organization_id = None  # ← Also add this for existing users
+        existing.organization_id = None
         db.commit()
         return {"message": "Existing user upgraded to super admin"}
     
-    hashed = pwd_context.hash(password)
+    hashed = get_password_hash(password)
     new_admin = User(
         username=username,
         email=email,
         password_hash=hashed,
         role='admin',
         is_super_admin=True,
-        organization_id=None,  # ← CHANGED from 1 to None
+        organization_id=None,
         status='approved',
         name=username
     )
     db.add(new_admin)
     db.commit()
     
-    return {"message": "Super admin created", "user_id": new_admin.id}     
+    return {"message": "Super admin created", "user_id": new_admin.id}

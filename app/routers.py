@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from . import models, schemas, database
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -13,8 +13,19 @@ import os
 import base64
 from fastapi import Form, UploadFile, File
 
-router = APIRouter(dependencies=[])        #router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+router = APIRouter(dependencies=[])
+
+# Direct bcrypt functions
+def hash_password(password: str) -> str:
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    plain_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
 # ========== MEDICAL RECORD SCHEMAS ==========
 
@@ -52,12 +63,12 @@ def register(user: schemas.UserCreate, request: Request, db: Session = Depends(d
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    hashed_password = pwd_context.hash(user.password)
+    hashed_password = hash_password(user.password)
     new_user = models.User(
         username=user.username,
         name=user.name,
         email=user.email,
-        password=hashed_password
+        password_hash=hashed_password
     )
     db.add(new_user)
     db.commit()
@@ -408,7 +419,7 @@ def create_doctor_profile(
     email = doctor_data.get('email')
     username = email.split('@')[0]
     password = "Doctor@2024"
-    hashed_password = pwd_context.hash(password)
+    hashed_password = hash_password(password)
     
     new_user = models.User(
         username=username,
@@ -592,7 +603,7 @@ def create_admin_endpoint(
         )
         raise HTTPException(status_code=400, detail="Admin already exists")
     
-    hashed_password = pwd_context.hash(admin_data.password)
+    hashed_password = hash_password(admin_data.password)
     
     new_admin = models.User(
         username=admin_data.username,
@@ -897,7 +908,7 @@ async def create_clinic_admin(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    hashed_password = pwd_context.hash(data.get('password', 'Admin123!'))
+    hashed_password = hash_password(data.get('password', 'Admin123!'))
     
     new_admin = User(
         username=data.get('username'),
@@ -944,7 +955,7 @@ async def reset_user_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    user.password_hash = pwd_context.hash(data.get('password', 'Admin123!'))
+    user.password_hash = hash_password(data.get('password', 'Admin123!'))
     db.commit()
     
     log_audit(
@@ -1113,4 +1124,4 @@ async def get_doctor_patients(
             }
             for p in patients
         ]
-    }        
+    }

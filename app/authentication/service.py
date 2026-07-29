@@ -1,17 +1,20 @@
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from app.models import User
 from .schemas import UserRegister, UserLogin
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    plain_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
-def create_user(db: Session, user: UserRegister, organization_id: int):  # ← ADD organization_id parameter
+def create_user(db: Session, user: UserRegister, organization_id: int):
     db_user = User(
         username=user.username,
         email=user.email,
@@ -28,7 +31,7 @@ def create_user(db: Session, user: UserRegister, organization_id: int):  # ← A
         specialization=user.specialization,
         department=user.department,
         
-        organization_id=organization_id  # ← ADD THIS LINE
+        organization_id=organization_id
     )
     db.add(db_user)
     db.commit()

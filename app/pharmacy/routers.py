@@ -4,6 +4,7 @@ from sqlalchemy import text
 from datetime import datetime
 import csv
 import io
+import bcrypt
 from app.database import get_db
 from app.authentication.auth import get_current_user
 from app.pharmacy.models import Pharmacy, PharmacyMedication
@@ -11,6 +12,18 @@ from app.models import User, Organization
 from app.utils.audit import log_audit
 
 router = APIRouter(tags=["pharmacy"])
+
+# Direct bcrypt functions
+def hash_password(password: str) -> str:
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    plain_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
 @router.get("/search/{medication_name}")
 async def search_medication_prices(
@@ -53,7 +66,7 @@ async def search_medication_prices(
             "address": row[3],
             "medication_name": row[4],
             "strength": row[5] or "",
-            "price": float(row[6])  # ← Changed from row[5] to row[6]
+            "price": float(row[6])
         })
     
     # Optional audit log without user info
@@ -65,7 +78,6 @@ async def search_medication_prices(
         action='SEARCH_MEDICATION',
         resource_type='MEDICATION',
         status='success',
-        
     )
     
     return {
@@ -284,7 +296,6 @@ async def upload_csv(
         resource_type='MEDICATION',
         status='success',
         ip_address=request.client.host if request.client else None,
-        
     )
     
     return {"message": "Upload complete", "added": added, "skipped": skipped}
@@ -334,20 +345,18 @@ async def change_pharmacy_password(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
     user = db.query(User).filter(User.id == current_user.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    if not pwd_context.verify(password_data['current_password'], user.password_hash):
+    if not verify_password(password_data['current_password'], user.password_hash):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
     
     if len(password_data['new_password']) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     
-    user.password_hash = pwd_context.hash(password_data['new_password'])
+    user.password_hash = hash_password(password_data['new_password'])
     db.commit()
     
     # Audit log
@@ -584,9 +593,6 @@ async def create_pharmacy_admin(
     if not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Super admin only")
     
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
     # Check if pharmacy exists
     pharmacy = db.query(Organization).filter(Organization.id == data.get('pharmacy_id'), Organization.type == 'pharmacy').first()
     if not pharmacy:
@@ -597,8 +603,8 @@ async def create_pharmacy_admin(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create pharmacy admin user
-    hashed_password = pwd_context.hash(data['password'])
+    # Create pharmacy admin user - using direct bcrypt
+    hashed_password = hash_password(data['password'])
     new_user = User(
         username=data['username'],
         email=data['email'],
@@ -629,4 +635,4 @@ async def create_pharmacy_admin(
         new_value={"email": data['email'], "pharmacy_id": data['pharmacy_id']}
     )
     
-    return {"message": "Pharmacy admin created", "id": new_user.id, "pharmacy_id": data['pharmacy_id']}     
+    return {"message": "Pharmacy admin created", "id": new_user.id, "pharmacy_id": data['pharmacy_id']}
