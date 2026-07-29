@@ -4,7 +4,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "sqlite:///./hospiapp.db"
+    DATABASE_URL: str = "sqlite:////dominusvobiscum/hospiapp_et.db"
     
     # JWT - Make sure this is also set in Render's environment variables
     JWT_SECRET_KEY: str = "new-theclapp-jwt-secret-2024-change-in-production"
