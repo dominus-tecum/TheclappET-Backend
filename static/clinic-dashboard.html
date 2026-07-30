@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TheClapp | Medical Dashboard</title>
+    <title>TheclappET | Medical Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * {
@@ -592,21 +592,22 @@
 <body>
     <script>
     // FIX: Prevent dashboard from loading inside itself
-    (function() {
+    //(function() {
         // Check if we're inside a nested frame or if dashboard already exists
-        if (window.self !== window.top || document.querySelector('.main-container')) {
+        //if (window.self !== window.top || document.querySelector('.main-container')) {
             // We're inside a frame or dashboard already rendered
             // Remove all content and reload cleanly
-            document.body.innerHTML = '';
-            if (window.self !== window.top) {
+            //document.body.innerHTML = '';
+            //if (window.self !== window.top) {
                 // We're in an iframe - break out
-                window.top.location.href = window.location.href;
-            } else {
-                window.location.reload(true);
-            }
-            return;
-        }
-    })();
+                //window.top.location.href = window.location.href;
+            //} else {
+                //window.location.reload(true);
+            //}
+            //return;
+        //}
+    //})();
+    
 </script>
 
 
@@ -729,7 +730,7 @@
     <div class="header">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <h1>
-            🏥 Theclapp Medical Dashboard
+            🏥 TheclappET Medical Dashboard
         </h1>
         <button onclick="logout()" style="background: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
             🔓 Logout
@@ -901,7 +902,7 @@
     // Prevent duplicate dashboard loading - SINGLETON PATTERN
     if (window._dashboardLoaded) {
         document.body.innerHTML = '';
-        window.location.reload(true);
+        //window.location.reload(true);
         throw new Error('Dashboard already loaded - reloading');
     }
     window._dashboardLoaded = true;
@@ -1094,7 +1095,7 @@ function shareCompatibilityReport(patientId) {
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
             alert('Session expired. Please login again.');
-            window.location.reload();
+            //window.location.reload();
             return;
         }
         if (response.status === 403) {
@@ -1155,7 +1156,7 @@ newLoginForm.addEventListener('submit', async (e) => {
             }
             localStorage.setItem('authToken', data.access_token);
             localStorage.setItem('user', JSON.stringify(data.user));
-            window.location.reload();
+            //window.location.reload();
         } else {
             errorDiv.textContent = data.detail || 'Invalid credentials';
             errorDiv.style.display = 'block';
@@ -13290,7 +13291,8 @@ function drawWomenHotFlashSeverityGraph(severityData) {
         function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
-    window.location.href = '/static/unified-dashboard.html';
+    location.reload(); // This will show login screen
+    //window.location.href = '/static/unified-dashboard.html';
 }
 
         

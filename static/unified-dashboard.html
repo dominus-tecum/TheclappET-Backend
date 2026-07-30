@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TheClapp | Unified Medical Dashboard</title>
+    <title>TheclappET | Unified Medical Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,7 +13,6 @@
             min-height: 100vh;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             position: fixed;
             left: 0;
@@ -88,14 +87,12 @@
             width: 32px;
         }
 
-        /* Main Content Area */
         .main-content {
             margin-left: 280px;
             min-height: 100vh;
             background: #f0f4f8;
         }
 
-        /* Welcome Screen */
         .welcome-screen {
             display: flex;
             justify-content: center;
@@ -152,7 +149,6 @@
             font-weight: 500;
         }
 
-        /* Dashboard containers */
         .dashboard-page {
             display: none;
             width: 100%;
@@ -168,15 +164,45 @@
             height: 100vh;
             border: none;
         }
+
+        /* Password visibility toggle styles */
+        .password-wrapper {
+            position: relative;
+        }
+        .password-wrapper input {
+            width: 100%;
+            padding: 12px;
+            padding-right: 45px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .password-wrapper input:focus {
+            outline: none;
+            border-color: #2d6a4f;
+        }
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #64748b;
+            font-size: 20px;
+            background: none;
+            border: none;
+        }
+        .toggle-password:hover {
+            color: #0f2b3d;
+        }
     </style>
 </head>
 <body>
 
-<!-- Sidebar -->
 <div class="sidebar">
     <div class="sidebar-header">
         <div class="logo">🏥</div>
-        <h2>TheClapp</h2>
+        <h2>TheclappET</h2>
         <p>Healthcare Management System</p>
     </div>
     
@@ -195,16 +221,26 @@
             <span class="nav-icon">📈</span>
             <span>Patient Tracking</span>
         </div>
+
+        <!-- Password Change & Logout at Bottom -->
+        <div style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+            <div class="nav-item" onclick="openChangePassword()">
+                <span class="nav-icon">🔑</span>
+                <span>Change Password</span>
+            </div>
+            <div class="nav-item" onclick="logout()">
+                <span class="nav-icon">🚪</span>
+                <span>Logout</span>
+            </div>
+        </div>
     </nav>
 </div>
 
-<!-- Main Content -->
 <div class="main-content">
-    <!-- Welcome Screen (shown by default) -->
     <div id="welcomeScreen" class="welcome-screen">
         <div class="welcome-card">
             <div class="welcome-logo">🏥✨</div>
-            <h1>Welcome to TheClapp</h1>
+            <h1>Welcome to TheclappET</h1>
             <p>Your comprehensive healthcare management platform.<br>Select a module from the sidebar to get started.</p>
             <div class="welcome-hint">
                 📌 Click on any menu item to access the dashboard
@@ -212,7 +248,6 @@
         </div>
     </div>
     
-    <!-- Dashboard Containers -->
     <div id="adminDashboard" class="dashboard-page">
         <iframe src="/static/clinic-admin.html"></iframe>
     </div>
@@ -226,7 +261,73 @@
     </div>
 </div>
 
+<!-- Change Password Modal -->
+<div id="changePasswordModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 20px; padding: 35px; max-width: 480px; width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="color: #0f2b3d; font-size: 22px;">🔑 Change Password</h3>
+            <button onclick="closeChangePassword()" style="background: none; border: none; font-size: 28px; cursor: pointer; color: #64748b;">&times;</button>
+        </div>
+        
+        <form id="changePasswordForm">
+            <!-- Username/Email Field -->
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 6px; color: #374151;">Username or Email</label>
+                <input type="text" id="changeUsername" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 14px;" placeholder="Enter your username or email" required>
+            </div>
+            
+            <!-- Current Password with visibility toggle -->
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 6px; color: #374151;">Current Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="currentPassword" placeholder="Enter current password" required>
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('currentPassword', this)">👁️</button>
+                </div>
+            </div>
+            
+            <!-- New Password with visibility toggle -->
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 6px; color: #374151;">New Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="newPassword" placeholder="Enter new password (min 6 characters)" required minlength="6">
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newPassword', this)">👁️</button>
+                </div>
+            </div>
+            
+            <!-- Confirm Password with visibility toggle -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 6px; color: #374151;">Confirm New Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="confirmPassword" placeholder="Re-enter new password" required>
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('confirmPassword', this)">👁️</button>
+                </div>
+            </div>
+            
+            <div id="passwordError" style="color: #dc2626; margin-bottom: 12px; display: none;"></div>
+            <div id="passwordSuccess" style="color: #16a34a; margin-bottom: 12px; display: none;"></div>
+            
+            <div style="display: flex; gap: 12px;">
+                <button type="submit" style="flex: 1; background: #2d6a4f; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px;">Update Password</button>
+                <button type="button" onclick="closeChangePassword()" style="flex: 1; background: #64748b; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+    // ===== PASSWORD VISIBILITY TOGGLE =====
+    function togglePasswordVisibility(inputId, button) {
+        const input = document.getElementById(inputId);
+        if (input.type === 'password') {
+            input.type = 'text';
+            button.textContent = '🙈';
+        } else {
+            input.type = 'password';
+            button.textContent = '👁️';
+        }
+    }
+
+    // ===== SWITCH DASHBOARD =====
     function switchDashboard(dashboard) {
         // Hide welcome screen
         document.getElementById('welcomeScreen').style.display = 'none';
@@ -237,7 +338,6 @@
             item.classList.remove('active');
         });
         
-        // Mark clicked item as active
         let clickedItem = null;
         if (dashboard === 'admin') {
             clickedItem = navItems[0];
@@ -262,6 +362,113 @@
             document.getElementById('patientTrackingDashboard').classList.add('active');
         }
     }
+
+    // ===== CHANGE PASSWORD FUNCTIONS =====
+    function openChangePassword() {
+        document.getElementById('changePasswordModal').style.display = 'flex';
+        document.getElementById('passwordError').style.display = 'none';
+        document.getElementById('passwordSuccess').style.display = 'none';
+        document.getElementById('changePasswordForm').reset();
+    }
+
+    function closeChangePassword() {
+        document.getElementById('changePasswordModal').style.display = 'none';
+    }
+
+    document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const username = document.getElementById('changeUsername').value;
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        const errorDiv = document.getElementById('passwordError');
+        const successDiv = document.getElementById('passwordSuccess');
+        
+        // Validate passwords match
+        if (newPassword !== confirmPassword) {
+            errorDiv.textContent = 'New passwords do not match';
+            errorDiv.style.display = 'block';
+            successDiv.style.display = 'none';
+            return;
+        }
+        
+        if (newPassword.length < 6) {
+            errorDiv.textContent = 'Password must be at least 6 characters';
+            errorDiv.style.display = 'block';
+            successDiv.style.display = 'none';
+            return;
+        }
+        
+        errorDiv.style.display = 'none';
+        successDiv.style.display = 'none';
+        
+        // Get token
+        const token = localStorage.getItem('authToken') || localStorage.getItem('adminToken');
+        
+        if (!token) {
+            errorDiv.textContent = 'Please login first';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/users/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    username: username,
+                    current_password: currentPassword,
+                    new_password: newPassword
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                successDiv.textContent = '✅ Password changed successfully! You can now login with your new password.';
+                successDiv.style.display = 'block';
+                errorDiv.style.display = 'none';
+                document.getElementById('changePasswordForm').reset();
+                
+                // Close modal after 2.5 seconds
+                setTimeout(() => {
+                    closeChangePassword();
+                }, 2500);
+            } else {
+                errorDiv.textContent = data.detail || 'Failed to change password';
+                errorDiv.style.display = 'block';
+                successDiv.style.display = 'none';
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.style.display = 'block';
+            successDiv.style.display = 'none';
+        }
+    });
+
+    // ===== LOGOUT =====
+    function logout() {
+        if (confirm('Are you sure you want to logout?')) {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('user');
+            localStorage.removeItem('adminUser');
+            window.location.reload();
+        }
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('changePasswordModal');
+        if (event.target === modal) {
+            closeChangePassword();
+        }
+    };
 </script>
 
 </body>

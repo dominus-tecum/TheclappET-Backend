@@ -89,6 +89,62 @@ def register(user: schemas.UserCreate, request: Request, db: Session = Depends(d
 
     return new_user
 
+
+# ========== CHANGE PASSWORD ==========
+
+class ChangePasswordRequest(BaseModel):
+    username: str
+    current_password: str
+    new_password: str
+
+@router.post("/users/change-password")
+def change_password(
+    request_data: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(database.get_db)
+):
+    """
+    Allows any user (doctor, staff, admin) to change their own password.
+    Requires current password verification.
+    """
+    # Find user by username OR email
+    user = db.query(models.User).filter(
+        (models.User.username == request_data.username) | 
+        (models.User.email == request_data.username)
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current password
+    if not verify_password(request_data.current_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    
+    # Hash new password
+    hashed_password = hash_password(request_data.new_password)
+    
+    # Update password
+    user.password_hash = hashed_password
+    db.commit()
+    
+    # Audit log
+    log_audit(
+        db=db,
+        user_id=user.id,
+        username=user.username,
+        user_role=user.role.value if hasattr(user.role, 'value') else str(user.role),
+        action='PASSWORD_CHANGE',
+        resource_type='USER',
+        resource_id=user.id,
+        status='success',
+        ip_address=request.client.host,
+        user_agent=request.headers.get('user-agent')
+    )
+    
+    return {"message": "Password updated successfully"}
+
+
+
 # ========== MEDICAL RECORD ENDPOINTS ==========
 
 @router.get("/patients/search")

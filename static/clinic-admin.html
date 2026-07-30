@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clinic Admin Dashboard - TheClapp</title>
+    <title>Clinic Admin Dashboard - TheclappET</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -193,7 +193,7 @@
         
         <div id="dashboardSection" class="hidden">
             <div class="header">
-                <h1>🏥 TheClapp Clinic Admin Dashboard</h1>
+                <h1>🏥 TheclappET Clinic Admin Dashboard</h1>
                 <button class="logout-btn" onclick="logout()">🔓 Logout</button>
             </div>
             <div class="main-container">
@@ -327,6 +327,13 @@
     </div>
     
     <script>
+        // ===== SIMPLE IFRAME DETECTION - NO REDIRECTS =====
+        // If we're in an iframe, just stay here - don't redirect anything
+        if (window.top !== window.self) {
+            console.log('🔒 Running in iframe - staying inside');
+            // Do NOT redirect. Do NOT override location. Just stay.
+        }
+        
         let authToken = null;
         let allDoctors = [];
         
@@ -695,5 +702,6 @@
             if (event.target === modal) closeEditModal();
         };
     </script>
+
 </body>
 </html>
