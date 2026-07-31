@@ -159,17 +159,19 @@ def get_all_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all users - Admin only (not doctors)"""
-    # ✅ Only admin can see all users
-    if current_user.role.value != 'admin':
-        raise HTTPException(status_code=403, detail="Admin only")
+    """Get users - Admin sees all, Doctor sees only themselves"""
     
-    if current_user.is_super_admin:
-        users = db.query(User).all()
+    if current_user.role.value == 'admin':
+        if current_user.is_super_admin:
+            users = db.query(User).all()
+        else:
+            users = db.query(User).filter(
+                User.organization_id == current_user.organization_id
+            ).all()
+    elif current_user.role.value == 'doctor':
+        users = [current_user]
     else:
-        users = db.query(User).filter(
-            User.organization_id == current_user.organization_id
-        ).all()
+        raise HTTPException(status_code=403, detail="Access denied")
     
     result = []
     for user in users:
@@ -197,7 +199,6 @@ def get_all_users(
     )
     
     return result
-
 
 @router.post("/register", response_model=UserRead)
 def register(user: UserRegister, db: Session = Depends(get_db)):
