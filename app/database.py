@@ -13,7 +13,7 @@ def get_database_url():
     environment = os.getenv("ENVIRONMENT", "development").lower()
     
     if environment == "production":
-        return "sqlite:////dominusvobiscum/hospiapp.db"
+        return "sqlite:////dominusvobiscum/hospiapp_et.db"
     elif environment == "staging":
         return "sqlite:///./hospiapp_staging.db"
     else:  # development
