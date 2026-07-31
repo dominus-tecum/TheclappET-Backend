@@ -1,4 +1,5 @@
-
+import os
+os.environ['ENVIRONMENT'] = 'production'
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Form, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -285,14 +286,30 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
+        print("=" * 60)
+    print("🔐 LOGIN ENDPOINT CALLED")
+    print(f"📧 Email: {user.email}")
+    print(f"🔗 Database URL: {db.bind.url}")
+    print(f"🌍 ENVIRONMENT: {os.getenv('ENVIRONMENT', 'NOT SET')}")
+    print("-" * 60)
     
     print(f"🔍 LOGIN - Attempt: {user.email}")
     # ✅ ADD THIS DEBUG CODE
     db_user = db.query(User).filter(User.email == user.email).first()
-    print(f"🔍 User in DB: {db_user is not None}")
+        print(f"👤 User found in DB: {db_user is not None}")
+
+    
     if db_user:
-        print(f"🔍 Status: {db_user.status}")
-        print(f"🔍 Hash: {db_user.password_hash[:30]}...")
+        print(f"   User ID: {db_user.id}")
+        print(f"   Status: {db_user.status}")
+        print(f"   Super Admin: {db_user.is_super_admin}")
+        print(f"   Hash: {db_user.password_hash[:30]}...")
+    else:
+        print("❌ User NOT found in this database!")
+        print("   This means the login endpoint is using the wrong database.")
+        print(f"   Expected: sqlite:////dominusvobiscum/hospiapp_et.db")
+        print(f"   Actual: {db.bind.url}")
+    print("-" * 60)
     
     authenticated_user = authenticate_user(db, user.email, user.password)
     # ✅ ADD THIS
