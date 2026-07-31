@@ -282,11 +282,10 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
         "status": created_user.status,
         "message": "Registration successful. Awaiting admin approval."
     }
-
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
-        print("=" * 60)
+    print("=" * 60)
     print("🔐 LOGIN ENDPOINT CALLED")
     print(f"📧 Email: {user.email}")
     print(f"🔗 Database URL: {db.bind.url}")
@@ -296,8 +295,7 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     print(f"🔍 LOGIN - Attempt: {user.email}")
     # ✅ ADD THIS DEBUG CODE
     db_user = db.query(User).filter(User.email == user.email).first()
-        print(f"👤 User found in DB: {db_user is not None}")
-
+    print(f"👤 User found in DB: {db_user is not None}")
     
     if db_user:
         print(f"   User ID: {db_user.id}")
@@ -314,7 +312,6 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     authenticated_user = authenticate_user(db, user.email, user.password)
     # ✅ ADD THIS
     print(f"🔍 authenticate_user returned: {authenticated_user}")
-
     
     if not authenticated_user:
         # ✅ ADD THIS AUDIT LOG
@@ -432,44 +429,7 @@ def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
             "organization_id": authenticated_user.organization_id
         }
     }
-    
-    if authenticated_user.status == 'inactive':
-        print("❌ LOGIN - Account inactive")
-        raise HTTPException(
-            status_code=403, 
-            detail="Account is deactivated. Please contact support."
-        )
-    
-    # Only approved users reach here
-    print(f"✅ LOGIN - Success for: {authenticated_user.email}, {authenticated_user.role}")
-    
-    # 1. Create access token (30 minutes)
-    access_token_expires = timedelta(minutes=30)
-    access_token = create_access_token(
-        data={"sub": authenticated_user.username}, 
-        expires_delta=access_token_expires
-    )
-    
-    # 2. Create refresh token (7 days)
-    refresh_token = create_refresh_token(
-        username=authenticated_user.username,
-        user_id=authenticated_user.id
-    )
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": {
-            "id": authenticated_user.id,
-            "username": authenticated_user.username,
-            "email": authenticated_user.email,
-            "role": authenticated_user.role,
-            "name": authenticated_user.name,
-            "phone_number": authenticated_user.phone_number,
-            "status": authenticated_user.status  # ← IMPORTANT: Send status to frontend
-        }
-    }
+
 @router.post("/refresh")
 async def refresh_token(refresh_token: str = Body(..., embed=True)):
     """
