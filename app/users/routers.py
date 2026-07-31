@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db
-from app.models import User, PatientProfile
+from app.models import User, PatientProfile, UserRole
 from .schemas import UserRegister, UserLogin, UserRead
 from .service import create_user, authenticate_user
 from app.authentication.auth import create_access_token, get_current_user
@@ -43,27 +43,39 @@ def get_pending_patients(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
-    print(f"DEBUG - User role: {current_user.role.value}")
-    print(f"DEBUG - User org_id: {current_user.organization_id}")
-    print(f"DEBUG - is_super_admin: {current_user.is_super_admin}")
-
-
     """Get pending patients - Admin only"""
-    if current_user.role.value != 'admin':
-        raise HTTPException(status_code=403, detail="Admin only")
+    # ✅ Allow admin OR doctor
+    if current_user.role.value not in ['admin', 'doctor']:
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    if current_user.is_super_admin:
-        patients = db.query(User).filter(
-            User.role == 'PATIENT',
-            User.status == 'pending'
+    # ✅ If doctor, filter only their patients
+    if current_user.role.value == 'doctor':
+        # Get patients assigned to this doctor
+        from app.models import PatientDoctorAssignment
+        assigned_patient_ids = db.query(PatientDoctorAssignment.patient_id).filter(
+            PatientDoctorAssignment.doctor_id == current_user.id,
+            PatientDoctorAssignment.end_date == None
         ).all()
-    else:
+        patient_ids = [p[0] for p in assigned_patient_ids]
+        
         patients = db.query(User).filter(
             User.role == 'PATIENT',
             User.status == 'pending',
-            User.organization_id == current_user.organization_id
+            User.id.in_(patient_ids)
         ).all()
+    else:
+        # Admin or Super Admin
+        if current_user.is_super_admin:
+            patients = db.query(User).filter(
+                User.role == 'PATIENT',
+                User.status == 'pending'
+            ).all()
+        else:
+            patients = db.query(User).filter(
+                User.role == 'PATIENT',
+                User.status == 'pending',
+                User.organization_id == current_user.organization_id
+            ).all()
     
     log_audit(
         db=db,
@@ -86,24 +98,45 @@ def get_user_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user statistics - Admin only"""
-    if current_user.role.value != 'admin':
-        raise HTTPException(status_code=403, detail="Admin only")
+    """Get user statistics - Admin or Doctor"""
+    # ✅ Allow admin OR doctor
+    if current_user.role.value not in ['admin', 'doctor']:
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    if current_user.is_super_admin:
-        total = db.query(User).count()
-        pending = db.query(User).filter(User.status == 'pending').count()
-        approved = db.query(User).filter(User.status == 'approved').count()
-    else:
-        total = db.query(User).filter(User.organization_id == current_user.organization_id).count()
+    # ✅ If doctor, filter their patients
+    if current_user.role.value == 'doctor':
+        from app.models import PatientDoctorAssignment
+        assigned_patient_ids = db.query(PatientDoctorAssignment.patient_id).filter(
+            PatientDoctorAssignment.doctor_id == current_user.id,
+            PatientDoctorAssignment.end_date == None
+        ).all()
+        patient_ids = [p[0] for p in assigned_patient_ids]
+        
+        total = db.query(User).filter(User.id.in_(patient_ids)).count()
         pending = db.query(User).filter(
-            User.organization_id == current_user.organization_id,
+            User.id.in_(patient_ids),
             User.status == 'pending'
         ).count()
         approved = db.query(User).filter(
-            User.organization_id == current_user.organization_id,
+            User.id.in_(patient_ids),
             User.status == 'approved'
         ).count()
+    else:
+        # Admin or Super Admin
+        if current_user.is_super_admin:
+            total = db.query(User).count()
+            pending = db.query(User).filter(User.status == 'pending').count()
+            approved = db.query(User).filter(User.status == 'approved').count()
+        else:
+            total = db.query(User).filter(User.organization_id == current_user.organization_id).count()
+            pending = db.query(User).filter(
+                User.organization_id == current_user.organization_id,
+                User.status == 'pending'
+            ).count()
+            approved = db.query(User).filter(
+                User.organization_id == current_user.organization_id,
+                User.status == 'approved'
+            ).count()
     
     log_audit(
         db=db,
@@ -126,7 +159,8 @@ def get_all_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all users - Admin only"""
+    """Get all users - Admin only (not doctors)"""
+    # ✅ Only admin can see all users
     if current_user.role.value != 'admin':
         raise HTTPException(status_code=403, detail="Admin only")
     
@@ -320,7 +354,8 @@ def login(
             "role": authenticated_user.role,
             "name": authenticated_user.name,
             "phone_number": authenticated_user.phone_number,
-            "status": authenticated_user.status
+            "status": authenticated_user.status,
+            "organization_id": authenticated_user.organization_id
         }
     }
 
