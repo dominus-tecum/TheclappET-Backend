@@ -53,28 +53,67 @@ def create_refresh_token(username: str, user_id: int):
     }
     
     return refresh_token
+
 @router.post("/register")
-async def register(
-    username: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    name: str = Form(None),
-    phone_number: str = Form(None),
-    role: str = Form(...),
-    organization_id: int = Form(...),
-    doctor_id: int = Form(None),
-    passport_number: str = Form(None),
-    emirates_id: str = Form(None),
-    profile_image: UploadFile = File(None),
-    request: Request = None,
-    db: Session = Depends(get_db)
-):
-    print(f"🔍 REGISTER - Full received data:")
+async def register(request: Request, db: Session = Depends(get_db)):
+    content_type = request.headers.get('content-type', '')
+    print(f"🔍 Content-Type: {content_type}")
+    
+    # ========== EXTRACT DATA BASED ON CONTENT TYPE ==========
+    if 'multipart/form-data' in content_type:
+        # ========== HANDLE FORMDATA (DASHBOARD) ==========
+        print("📥 Processing FormData request")
+        form = await request.form()
+        
+        username = form.get('username')
+        email = form.get('email')
+        password = form.get('password')
+        name = form.get('name')
+        phone_number = form.get('phone_number')
+        role = form.get('role')
+        organization_id = int(form.get('organization_id')) if form.get('organization_id') else None
+        doctor_id = form.get('doctor_id')
+        passport_number = form.get('passport_number')
+        emirates_id = form.get('emirates_id')
+        
+        # Handle profile image
+        profile_image = form.get('profile_image')
+        profile_image_data = None
+        if profile_image and hasattr(profile_image, 'read'):
+            profile_image_data = await profile_image.read()
+            print(f"📸 Profile image received: {profile_image.filename} ({len(profile_image_data)} bytes)")
+    else:
+        # ========== HANDLE JSON (MOBILE APP) ==========
+        print("📥 Processing JSON request")
+        body = await request.json()
+        
+        username = body.get('username')
+        email = body.get('email')
+        password = body.get('password')
+        name = body.get('name')
+        phone_number = body.get('phone_number')
+        role = body.get('role', 'patient')
+        organization_id = body.get('organization_id')
+        doctor_id = body.get('doctor_id')
+        passport_number = body.get('passport_number')
+        emirates_id = body.get('emirates_id')
+        profile_image_data = None  # No image from JSON
+    
+    # ========== VALIDATE REQUIRED FIELDS ==========
+    if not username or not email or not password:
+        raise HTTPException(status_code=400, detail="Username, email and password are required")
+    
+    if not organization_id:
+        raise HTTPException(status_code=400, detail="Organization ID is required")
+    
+    print(f"🔍 REGISTER - Received data:")
     print(f"   username: {username}")
     print(f"   email: {email}")
     print(f"   organization_id: {organization_id}")
     print(f"   role: {role}")
     print("=" * 50)
+    
+    # ========== CHECK FOR PENDING CONSENTS ==========
     print("🔵 REGISTER ENDPOINT - Checking for pending consents")
     if request and hasattr(request, 'session'):
         print(f"📝 Session at registration start: {dict(request.session)}")
@@ -83,14 +122,8 @@ async def register(
         print("=" * 50)
         print(f"🔍 Session ID at registration: {request.session}")
         print(f"🔍 Session keys at registration: {list(request.session.keys())}")
-    
-    # Read profile image if provided
-    profile_image_data = None
-    if profile_image:
-        profile_image_data = await profile_image.read()
-        print(f"📸 Profile image received: {profile_image.filename} ({len(profile_image_data)} bytes)")
 
-    # ========== ADD PLAIN TEXT DUPLICATE CHECKS HERE ==========
+    # ========== PLAIN TEXT DUPLICATE CHECKS ==========
     # Check by plain text first (most reliable for existing records)
     existing_email = db.query(User).filter(User.email == email).first()
     if existing_email:
@@ -110,20 +143,17 @@ async def register(
         existing_emirates = db.query(User).filter(User.emirates_id == emirates_id).first()
         if existing_emirates:
             raise HTTPException(status_code=400, detail="Emirates ID already registered")
-    # ========== END OF PLAIN TEXT CHECKS ==========
-    
-    # Check duplicates - try hash first, then plain email
+
+    # ========== HASH DUPLICATE CHECKS ==========
     email_hash = hash_value(email)
     existing_email = db.query(User).filter(User.email_hash == email_hash).first()
 
-    # If not found by hash, check by plain email (for old records)
     if not existing_email:
         existing_email = db.query(User).filter(User.email == email).first()
 
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Check passport if provided
     if passport_number:
         passport_hash = hash_value(passport_number)
         existing_passport = db.query(User).filter(User.passport_hash == passport_hash).first()
@@ -146,34 +176,32 @@ async def register(
         if existing_emirates:
             raise HTTPException(status_code=400, detail="Emirates ID already registered")
 
-    # Verify organization exists
+    # ========== VERIFY ORGANIZATION EXISTS ==========
     org = db.query(Organization).filter(Organization.id == organization_id).first()
     if not org:
         raise HTTPException(status_code=400, detail="Invalid organization")
 
-    # Direct bcrypt - NO passlib
+    # ========== HASH PASSWORD ==========
     hashed_password = get_password_hash(password)
 
+    # ========== CREATE USER ==========
     created_user = User(
         username=username,
         password_hash=hashed_password,
         role=role,
         organization_id=organization_id,
         status='pending',
-        # Original fields (keep)
         name=name,
         email=email,
         phone_number=phone_number,
         passport_number=passport_number,
         emirates_id=emirates_id,
-        profile_image=profile_image_data,  # Store the image
-        # Encrypted fields
+        profile_image=profile_image_data,
         name_encrypted=encrypt_value(name) if name else None,
         email_encrypted=encrypt_value(email),
         phone_encrypted=encrypt_value(phone_number) if phone_number else None,
         passport_encrypted=encrypt_value(passport_number) if passport_number else None,
         emirates_id_encrypted=encrypt_value(emirates_id) if emirates_id else None,
-        # Hashed fields
         email_hash=hash_value(email),
         phone_hash=hash_value(phone_number) if phone_number else None,
         passport_hash=passport_hash,
@@ -184,8 +212,7 @@ async def register(
     db.commit()
     db.refresh(created_user)
 
-    # ========== LINK PENDING CONSENTS TO NEW USER ==========
-    # After user is created, link any pending consents from the last hour
+    # ========== LINK PENDING CONSENTS ==========
     if request and hasattr(request, 'session'):
         pending_consent_ids = request.session.get('pending_consent_ids')
         if pending_consent_ids:
@@ -193,18 +220,14 @@ async def register(
             stmt = update(PatientConsent).where(
                 PatientConsent.id.in_(pending_consent_ids)
             ).values(user_id=created_user.id)
-        
             db.execute(stmt)
             db.commit()
             print(f"✅ Linked {len(pending_consent_ids)} pending consents to user {created_user.id}")
-        
-            # Clear the session
             request.session.pop('pending_consent_ids', None)
-    # ========== END OF CONSENT LINKING ==========
 
     print(f"✅ REGISTER - User created: {created_user.id}, {created_user.email}, {created_user.username}")
     
-    # CREATE PATIENT PROFILE
+    # ========== CREATE PATIENT PROFILE ==========
     existing_patient = db.query(PatientProfile).filter(PatientProfile.user_id == created_user.id).first()
     if not existing_patient:
         new_patient = PatientProfile(
@@ -223,12 +246,10 @@ async def register(
     else:
         print(f"⚠️ Patient profile already exists: {existing_patient.id}")
 
-    # ========== DOCTOR ASSIGNMENT BLOCK ==========
-    # Assign patient to selected doctor (if doctor_id provided)
+    # ========== DOCTOR ASSIGNMENT ==========
     if doctor_id:
         print(f"🔍 Attempting to assign patient to doctor_id: {doctor_id}")
         
-        # Verify doctor exists and belongs to same organization
         doctor = db.query(User).filter(
             User.id == doctor_id,
             User.role == UserRole.DOCTOR,
@@ -236,7 +257,6 @@ async def register(
         ).first()
         
         if doctor:
-            # Create the assignment record
             assignment = PatientDoctorAssignment(
                 patient_id=created_user.id,
                 doctor_id=doctor_id,
@@ -247,7 +267,6 @@ async def register(
             db.commit()
             print(f"✅ Patient assigned to doctor ID: {doctor_id} (Dr. {doctor.name})")
             
-            # Audit log for doctor assignment
             log_audit(
                 db=db,
                 user_id=created_user.id,
@@ -263,9 +282,8 @@ async def register(
             )
         else:
             print(f"⚠️ Doctor ID {doctor_id} not found or invalid (not a doctor or wrong organization)")
-    # ========== END OF DOCTOR ASSIGNMENT BLOCK ==========
 
-    # Audit log for registration
+    # ========== AUDIT LOG ==========
     log_audit(
         db=db,
         user_id=created_user.id,
@@ -288,7 +306,7 @@ async def register(
         "status": created_user.status,
         "message": "Registration successful. Awaiting admin approval."
     }
-
+    
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
