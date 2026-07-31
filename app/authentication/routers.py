@@ -1,6 +1,6 @@
 import os
 os.environ['ENVIRONMENT'] = 'production'
-from fastapi import APIRouter, Depends, HTTPException, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, Form, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -53,147 +53,153 @@ def create_refresh_token(username: str, user_id: int):
     }
     
     return refresh_token
-
-
 @router.post("/register")
-def register(user: UserRegister, request: Request, db: Session = Depends(get_db)):
-    user.passport_number = user.passport_number if user.passport_number else None
-    user.emirates_id = user.emirates_id if user.emirates_id else None
-    print(f"🔍 REGISTER - Full received data: {user.dict()}")
-    print(f"🔍 REGISTER - organization_id: {user.organization_id}")
-    print("=" * 50)
-    print("🔍 REGISTER - Received data:")
-    print(f"   username: {user.username}")
-    print(f"   email: {user.email}")
-    print(f"   organization_id: {user.organization_id}")
-    print(f"   organization_id type: {type(user.organization_id)}")
-    print("=" * 50)
-    print(f"🔍 REGISTER - Received: {user.dict()}")
+async def register(
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    name: str = Form(None),
+    phone_number: str = Form(None),
+    role: str = Form(...),
+    organization_id: int = Form(...),
+    doctor_id: int = Form(None),
+    passport_number: str = Form(None),
+    emirates_id: str = Form(None),
+    profile_image: UploadFile = File(None),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    print(f"🔍 REGISTER - Full received data:")
+    print(f"   username: {username}")
+    print(f"   email: {email}")
+    print(f"   organization_id: {organization_id}")
+    print(f"   role: {role}")
     print("=" * 50)
     print("🔵 REGISTER ENDPOINT - Checking for pending consents")
-    print(f"📝 Session at registration start: {dict(request.session)}")
-    pending_consent_ids = request.session.get('pending_consent_ids')
-    print(f"📝 Retrieved pending_consent_ids: {pending_consent_ids}")
-    print("=" * 50)
-    print(f"🔍 Session ID at registration: {request.session}")
-    print(f"🔍 Session keys at registration: {list(request.session.keys())}")
+    if request and hasattr(request, 'session'):
+        print(f"📝 Session at registration start: {dict(request.session)}")
+        pending_consent_ids = request.session.get('pending_consent_ids')
+        print(f"📝 Retrieved pending_consent_ids: {pending_consent_ids}")
+        print("=" * 50)
+        print(f"🔍 Session ID at registration: {request.session}")
+        print(f"🔍 Session keys at registration: {list(request.session.keys())}")
+    
+    # Read profile image if provided
+    profile_image_data = None
+    if profile_image:
+        profile_image_data = await profile_image.read()
+        print(f"📸 Profile image received: {profile_image.filename} ({len(profile_image_data)} bytes)")
 
-
-        # ========== ADD PLAIN TEXT DUPLICATE CHECKS HERE ==========
+    # ========== ADD PLAIN TEXT DUPLICATE CHECKS HERE ==========
     # Check by plain text first (most reliable for existing records)
-    existing_email = db.query(User).filter(User.email == user.email).first()
+    existing_email = db.query(User).filter(User.email == email).first()
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    if user.passport_number:
-        existing_passport = db.query(User).filter(User.passport_number == user.passport_number).first()
+    if passport_number:
+        existing_passport = db.query(User).filter(User.passport_number == passport_number).first()
         if existing_passport:
             raise HTTPException(status_code=400, detail="Passport number already registered")
 
-    if user.phone_number:
-        existing_phone = db.query(User).filter(User.phone_number == user.phone_number).first()
+    if phone_number:
+        existing_phone = db.query(User).filter(User.phone_number == phone_number).first()
         if existing_phone:
             raise HTTPException(status_code=400, detail="Phone number already registered")
 
-    if user.emirates_id:
-        existing_emirates = db.query(User).filter(User.emirates_id == user.emirates_id).first()
+    if emirates_id:
+        existing_emirates = db.query(User).filter(User.emirates_id == emirates_id).first()
         if existing_emirates:
             raise HTTPException(status_code=400, detail="Emirates ID already registered")
     # ========== END OF PLAIN TEXT CHECKS ==========
     
-
     # Check duplicates - try hash first, then plain email
-    email_hash = hash_value(user.email)
+    email_hash = hash_value(email)
     existing_email = db.query(User).filter(User.email_hash == email_hash).first()
 
     # If not found by hash, check by plain email (for old records)
     if not existing_email:
-        existing_email = db.query(User).filter(User.email == user.email).first()
+        existing_email = db.query(User).filter(User.email == email).first()
 
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Check passport if provided
-    if user.passport_number:
-        passport_hash = hash_value(user.passport_number)
+    if passport_number:
+        passport_hash = hash_value(passport_number)
         existing_passport = db.query(User).filter(User.passport_hash == passport_hash).first()
         if not existing_passport:
-            existing_passport = db.query(User).filter(User.passport_number == user.passport_number).first()
+            existing_passport = db.query(User).filter(User.passport_number == passport_number).first()
         if existing_passport:
             raise HTTPException(status_code=400, detail="Passport number already registered")
     else:
         passport_hash = None
                 
-    if user.phone_number:
-        phone_hash = hash_value(user.phone_number)
+    if phone_number:
+        phone_hash = hash_value(phone_number)
         existing_phone = db.query(User).filter(User.phone_hash == phone_hash).first()
         if existing_phone:
             raise HTTPException(status_code=400, detail="Phone number already registered")
     
-    if user.emirates_id:
-        emirates_hash = hash_value(user.emirates_id)
+    if emirates_id:
+        emirates_hash = hash_value(emirates_id)
         existing_emirates = db.query(User).filter(User.emirates_id_hash == emirates_hash).first()
         if existing_emirates:
             raise HTTPException(status_code=400, detail="Emirates ID already registered")
 
     # Verify organization exists
-    org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
     if not org:
         raise HTTPException(status_code=400, detail="Invalid organization")
 
     # Direct bcrypt - NO passlib
-    hashed_password = get_password_hash(user.password)
+    hashed_password = get_password_hash(password)
 
     created_user = User(
-        username=user.username,
+        username=username,
         password_hash=hashed_password,
-        role=user.role,
-        organization_id=user.organization_id,
+        role=role,
+        organization_id=organization_id,
         status='pending',
         # Original fields (keep)
-        name=user.name,
-        email=user.email,
-        phone_number=user.phone_number,
-        passport_number=user.passport_number,
-        emirates_id=user.emirates_id,
+        name=name,
+        email=email,
+        phone_number=phone_number,
+        passport_number=passport_number,
+        emirates_id=emirates_id,
+        profile_image=profile_image_data,  # Store the image
         # Encrypted fields
-        name_encrypted=encrypt_value(user.name),
-        email_encrypted=encrypt_value(user.email),
-        phone_encrypted=encrypt_value(user.phone_number),
-        passport_encrypted=encrypt_value(user.passport_number),
-        emirates_id_encrypted=encrypt_value(user.emirates_id),
+        name_encrypted=encrypt_value(name) if name else None,
+        email_encrypted=encrypt_value(email),
+        phone_encrypted=encrypt_value(phone_number) if phone_number else None,
+        passport_encrypted=encrypt_value(passport_number) if passport_number else None,
+        emirates_id_encrypted=encrypt_value(emirates_id) if emirates_id else None,
         # Hashed fields
-        email_hash=hash_value(user.email),
-        phone_hash=hash_value(user.phone_number) if user.phone_number else None,
+        email_hash=hash_value(email),
+        phone_hash=hash_value(phone_number) if phone_number else None,
         passport_hash=passport_hash,
-        emirates_id_hash=hash_value(user.emirates_id) if user.emirates_id else None
+        emirates_id_hash=hash_value(emirates_id) if emirates_id else None
     )
 
-    
     db.add(created_user)
     db.commit()
     db.refresh(created_user)
 
-        # ========== LINK PENDING CONSENTS TO NEW USER ==========
+    # ========== LINK PENDING CONSENTS TO NEW USER ==========
     # After user is created, link any pending consents from the last hour
-
-    # Get consent IDs from session
-    pending_consent_ids = request.session.get('pending_consent_ids')
-    if pending_consent_ids:
-        from sqlalchemy import update
-        stmt = update(PatientConsent).where(
-            PatientConsent.id.in_(pending_consent_ids)
-        ).values(user_id=created_user.id)
-    
-        db.execute(stmt)
-        db.commit()
-        print(f"✅ Linked {len(pending_consent_ids)} pending consents to user {created_user.id}")
-    
-        # Clear the session
-        request.session.pop('pending_consent_ids', None)
+    if request and hasattr(request, 'session'):
+        pending_consent_ids = request.session.get('pending_consent_ids')
+        if pending_consent_ids:
+            from sqlalchemy import update
+            stmt = update(PatientConsent).where(
+                PatientConsent.id.in_(pending_consent_ids)
+            ).values(user_id=created_user.id)
         
-        # Clear the session
-        request.session.pop('pending_consent_ids', None)
+            db.execute(stmt)
+            db.commit()
+            print(f"✅ Linked {len(pending_consent_ids)} pending consents to user {created_user.id}")
+        
+            # Clear the session
+            request.session.pop('pending_consent_ids', None)
     # ========== END OF CONSENT LINKING ==========
 
     print(f"✅ REGISTER - User created: {created_user.id}, {created_user.email}, {created_user.username}")
@@ -203,9 +209,9 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
     if not existing_patient:
         new_patient = PatientProfile(
             user_id=created_user.id,
-            name=user.name or created_user.name or user.username,
-            email=user.email,
-            phone_number=user.phone_number,
+            name=name or created_user.name or username,
+            email=email,
+            phone_number=phone_number,
             high_risk=False,
             created_at=datetime.now(),
             updated_at=datetime.now()
@@ -217,46 +223,46 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
     else:
         print(f"⚠️ Patient profile already exists: {existing_patient.id}")
 
-    # ========== DOCTOR ASSIGNMENT BLOCK - CORRECTED ==========
+    # ========== DOCTOR ASSIGNMENT BLOCK ==========
     # Assign patient to selected doctor (if doctor_id provided)
-    if user.doctor_id:
-        print(f"🔍 Attempting to assign patient to doctor_id: {user.doctor_id}")
+    if doctor_id:
+        print(f"🔍 Attempting to assign patient to doctor_id: {doctor_id}")
         
         # Verify doctor exists and belongs to same organization
         doctor = db.query(User).filter(
-            User.id == user.doctor_id,
+            User.id == doctor_id,
             User.role == UserRole.DOCTOR,
-            User.organization_id == user.organization_id
+            User.organization_id == organization_id
         ).first()
         
         if doctor:
             # Create the assignment record
             assignment = PatientDoctorAssignment(
                 patient_id=created_user.id,
-                doctor_id=user.doctor_id,
+                doctor_id=doctor_id,
                 assigned_date=datetime.now(),
                 reason="Patient selected during registration"
             )
             db.add(assignment)
             db.commit()
-            print(f"✅ Patient assigned to doctor ID: {user.doctor_id} (Dr. {doctor.name})")
+            print(f"✅ Patient assigned to doctor ID: {doctor_id} (Dr. {doctor.name})")
             
             # Audit log for doctor assignment
             log_audit(
                 db=db,
                 user_id=created_user.id,
                 username=created_user.username,
-                user_role=created_user.role.value,
+                user_role=created_user.role.value if hasattr(created_user.role, 'value') else str(created_user.role),
                 action='ASSIGN',
                 resource_type='DOCTOR_ASSIGNMENT',
                 patient_id=created_user.id,
                 status='success',
-                ip_address=request.client.host,
-                user_agent=request.headers.get('user-agent'),
-                new_value={"doctor_id": user.doctor_id, "reason": "Patient selected during registration"}
+                ip_address=request.client.host if request else None,
+                user_agent=request.headers.get('user-agent') if request else None,
+                new_value={"doctor_id": doctor_id, "reason": "Patient selected during registration"}
             )
         else:
-            print(f"⚠️ Doctor ID {user.doctor_id} not found or invalid (not a doctor or wrong organization)")
+            print(f"⚠️ Doctor ID {doctor_id} not found or invalid (not a doctor or wrong organization)")
     # ========== END OF DOCTOR ASSIGNMENT BLOCK ==========
 
     # Audit log for registration
@@ -264,24 +270,25 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
         db=db,
         user_id=created_user.id,
         username=created_user.username,
-        user_role=created_user.role.value,
+        user_role=created_user.role.value if hasattr(created_user.role, 'value') else str(created_user.role),
         action='REGISTER',
         resource_type='USER',
         resource_id=created_user.id,
         status='success',
-        ip_address=request.client.host,
-        user_agent=request.headers.get('user-agent'),
-        new_value={"organization_id": user.organization_id, "doctor_id": user.doctor_id if user.doctor_id else None}
+        ip_address=request.client.host if request else None,
+        user_agent=request.headers.get('user-agent') if request else None,
+        new_value={"organization_id": organization_id, "doctor_id": doctor_id if doctor_id else None}
     )
     
     return {
         "id": created_user.id,
         "username": created_user.username,
-        "email": user.email,
-        "role": created_user.role.value,
+        "email": email,
+        "role": created_user.role.value if hasattr(created_user.role, 'value') else str(created_user.role),
         "status": created_user.status,
         "message": "Registration successful. Awaiting admin approval."
     }
+
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
