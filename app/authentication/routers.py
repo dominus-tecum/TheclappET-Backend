@@ -287,8 +287,17 @@ def register(user: UserRegister, request: Request, db: Session = Depends(get_db)
 def login(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     
     print(f"🔍 LOGIN - Attempt: {user.email}")
+    # ✅ ADD THIS DEBUG CODE
+    db_user = db.query(User).filter(User.email == user.email).first()
+    print(f"🔍 User in DB: {db_user is not None}")
+    if db_user:
+        print(f"🔍 Status: {db_user.status}")
+        print(f"🔍 Hash: {db_user.password_hash[:30]}...")
     
     authenticated_user = authenticate_user(db, user.email, user.password)
+    # ✅ ADD THIS
+    print(f"🔍 authenticate_user returned: {authenticated_user}")
+
     
     if not authenticated_user:
         # ✅ ADD THIS AUDIT LOG
